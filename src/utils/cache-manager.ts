@@ -1,18 +1,15 @@
 // utils/cache-manager.ts
 export class CacheManager {
   private prefix = "graphql-cache:";
-  private defaultTTL = 1000 * 60 * 60; // 1 hour
-
-  private isClient(): boolean {
-    return typeof window !== "undefined";
-  }
+  private defaultTTL = 1000 * 60 * 60;
 
   set(
     key: string,
-    entry: { data: any; timestamp: number },
+    entry: { data: unknown; timestamp: number },
     ttl: number = this.defaultTTL
   ): void {
-    if (!this.isClient()) return;
+    if (typeof window === "undefined") return;
+
     try {
       const cacheEntry = {
         data: entry.data,
@@ -25,15 +22,18 @@ export class CacheManager {
     }
   }
 
-  get(key: string): { data: any; timestamp: number } | null {
-    if (!this.isClient()) return null;
+  get(key: string): { data: unknown; timestamp: number } | null {
+    if (typeof window === "undefined") return null;
+
     try {
       const item = localStorage.getItem(this.prefix + key);
       if (!item) return null;
 
       const cacheEntry = JSON.parse(item);
+
+      // Check if cache is valid
       if (Date.now() - cacheEntry.timestamp > cacheEntry.ttl) {
-        this.delete(key);
+        // Don't delete expired cache immediately - let it be replaced by fresh data
         return null;
       }
 
@@ -47,13 +47,18 @@ export class CacheManager {
     }
   }
 
+  isValid(key: string): boolean {
+    const cached = this.get(key);
+    return cached !== null;
+  }
+
   delete(key: string): void {
-    if (!this.isClient()) return;
+    if (typeof window === "undefined") return;
     localStorage.removeItem(this.prefix + key);
   }
 
   clear(): void {
-    if (!this.isClient()) return;
+    if (typeof window === "undefined") return;
     Object.keys(localStorage)
       .filter((key) => key.startsWith(this.prefix))
       .forEach((key) => localStorage.removeItem(key));
