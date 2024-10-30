@@ -1,11 +1,15 @@
 ## useQueryWithCache Hook
 
+This hook is designed to simplify caching of GraphQL queries in Next.js applications. It provides a convenient way to manage localStorage caching, handle data fetching and caching logic, and provide loading and error states.
+
 The core functionality is provided by a custom React hook that:
 
 - Combines multiple queries into one request
 - Manages localStorage caching
 - Handles data fetching and caching logic
 - Provides loading and error states
+
+### Example Usage
 
 ```typescript
 const { data, loading, error, isFromCache } = useQueryWithCache<DataType>(
@@ -85,3 +89,12 @@ function MyComponent() {
 - TypeScript support included for type safety
 
 This project provides a solution for caching GraphQL queries while maintaining good user experience and performance.
+
+## Installation
+
+running this repo
+
+```bash
+pnpm i
+pnpm dev
+```
