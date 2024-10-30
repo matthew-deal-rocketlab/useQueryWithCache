@@ -1,7 +1,7 @@
-// hooks/useQueryWithCache.ts
 import { useEffect, useRef, useState } from "react";
 import { useQuery, DocumentNode } from "@apollo/client";
-import { CacheManager } from "@/utils/cache-manager";
+import { getCache, setCache } from "@/utils/cache-manager";
+import { OperationDefinitionNode } from "graphql";
 
 interface CachedData<T> {
   data: T;
@@ -13,7 +13,7 @@ export function useQueryWithCache<T>(
   cacheKeys: string[]
 ) {
   const [cachedData, setCachedData] = useState<{
-    [key: string]: CachedData<any>;
+    [key: string]: CachedData<unknown>;
   }>({});
 
   const queryRef = useRef<DocumentNode>();
@@ -22,7 +22,8 @@ export function useQueryWithCache<T>(
   // Create the query only once
   if (!queryRef.current) {
     const combinedSelections = queries.map((query) => {
-      const queryDef = query.definitions[0] as any;
+      const queryDef = query
+        .definitions[0] as unknown as OperationDefinitionNode;
       return queryDef.selectionSet.selections[0];
     });
 
@@ -48,11 +49,10 @@ export function useQueryWithCache<T>(
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const cacheManager = new CacheManager();
-    const allCachedData: { [key: string]: CachedData<any> } = {};
+    const allCachedData: { [key: string]: CachedData<unknown> } = {};
 
     cacheKeys.forEach((key) => {
-      const cached = cacheManager.get(key);
+      const cached = getCache(key);
       if (cached?.data) {
         allCachedData[key] = cached;
       }
@@ -70,6 +70,8 @@ export function useQueryWithCache<T>(
 
   const hasValidCache = Object.keys(cachedData).length === cacheKeys.length;
 
+  console.log("hasValidCache", hasValidCache);
+
   const { loading, error, data } = useQuery(queryRef.current, {
     skip: typeof window === "undefined" || hasValidCache,
   });
@@ -78,8 +80,7 @@ export function useQueryWithCache<T>(
   useEffect(() => {
     if (!data || !isMounted.current) return;
 
-    const cacheManager = new CacheManager();
-    const newCacheData: { [key: string]: CachedData<any> } = {};
+    const newCacheData: { [key: string]: CachedData<unknown> } = {};
 
     Object.entries(data).forEach(([operationName, resultData], index) => {
       const cacheKey = cacheKeys[index];
@@ -87,7 +88,7 @@ export function useQueryWithCache<T>(
         data: { [operationName]: resultData },
         timestamp: Date.now(),
       };
-      cacheManager.set(cacheKey, newCacheEntry);
+      setCache(cacheKey, newCacheEntry);
       newCacheData[cacheKey] = newCacheEntry;
     });
 
