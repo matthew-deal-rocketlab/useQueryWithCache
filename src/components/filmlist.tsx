@@ -1,7 +1,7 @@
 "use client";
 import { GET_FILMS, GET_CHARACTERS } from "@/quieries/queries";
 import { useQueryWithCache } from "@/hooks/useQuery";
-import { Suspense } from "react";
+import { useEffect, useState } from "react";
 
 interface Film {
   __typename: "Film";
@@ -40,17 +40,15 @@ interface CombinedData {
 }
 
 function LoadingState({ isUpdate = false }: { isUpdate?: boolean }) {
-  if (isUpdate) {
-    return (
-      <div className="fixed top-0 left-0 right-0 bg-blue-100 text-blue-800 px-4 py-2 text-sm">
-        Checking for updates...
-      </div>
-    );
-  }
-  return null;
+  if (!isUpdate) return null;
+
+  return (
+    <div className="fixed top-0 left-0 right-0 bg-blue-100 text-blue-800 px-4 py-2 text-sm">
+      Checking for updates...
+    </div>
+  );
 }
 
-// Main content component
 function FilmsContent({ data }: { data: CombinedData }) {
   return (
     <div className="flex flex-col gap-8 items-center">
@@ -81,23 +79,45 @@ function FilmsContent({ data }: { data: CombinedData }) {
 }
 
 export default function FilmsList() {
-  const { data, loading, error, isFromCache } = useQueryWithCache<CombinedData>(
-    [GET_FILMS, GET_CHARACTERS],
-    ["films-cache", "characters-cache"]
-  );
+  const [mounted, setMounted] = useState(false);
+  const [shouldShowLoading, setShouldShowLoading] = useState(false);
 
-  console.log("isFromCache", isFromCache);
+  useEffect(() => {
+    setMounted(true);
+    const timer = setTimeout(() => {
+      setShouldShowLoading(true);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const { data, loading, error, isFromCache, refetch } =
+    useQueryWithCache<CombinedData>(
+      [GET_FILMS, GET_CHARACTERS],
+      ["films-cache", "characters-cache"]
+    );
+
+  if (!mounted) {
+    return null;
+  }
+
+  if (!data && loading && shouldShowLoading) {
+    return <div className="text-3xl text-center">Loading...</div>;
+  }
 
   if (error) {
     return <div>Error: {error.message}</div>;
   }
 
   return (
-    <Suspense fallback={<div className="text-3xl text-center">Loading...</div>}>
-      <div>
-        <LoadingState isUpdate={loading && isFromCache.some(Boolean)} />
-        {data && <FilmsContent data={data} />}
-      </div>
-    </Suspense>
+    <div>
+      <LoadingState isUpdate={loading && isFromCache.some(Boolean)} />
+      {data && <FilmsContent data={data} />}
+      <button
+        onClick={() => refetch()}
+        className="px-4 py-2 bg-blue-500 text-white rounded"
+      >
+        Refresh Data
+      </button>
+    </div>
   );
 }

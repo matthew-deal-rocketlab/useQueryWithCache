@@ -1,28 +1,39 @@
 // hooks/useQueryWithCache.ts
 import { useEffect, useRef, useState } from "react";
 import { useQuery, DocumentNode } from "@apollo/client";
-import { CacheManager } from "@/utils/cache-manager";
+import { OperationDefinitionNode } from "graphql";
+import { getCache, setCache } from "@/utils/cache-manager";
 
-interface CachedData<T> {
-  data: T;
-  timestamp: number;
-}
-
+// hooks/useQueryWithCache.ts
 export function useQueryWithCache<T>(
   queries: DocumentNode[],
-  cacheKeys: string[]
+  cacheKeys: string[],
+  options?: {
+    refetchInterval?: number;
+  }
 ) {
   const [cachedData, setCachedData] = useState<{
-    [key: string]: CachedData<any>;
-  }>({});
+    [key: string]: { data: unknown };
+  }>(() => {
+    if (typeof window === "undefined") return {};
+
+    const initialCache: { [key: string]: { data: unknown } } = {};
+    cacheKeys.forEach((key) => {
+      const cached = getCache(key);
+      if (cached?.data) {
+        initialCache[key] = { data: cached.data };
+      }
+    });
+    return initialCache;
+  });
 
   const queryRef = useRef<DocumentNode>();
-  const isMounted = useRef(false);
 
   // Create the query only once
   if (!queryRef.current) {
     const combinedSelections = queries.map((query) => {
-      const queryDef = query.definitions[0] as any;
+      const queryDef = query
+        .definitions[0] as unknown as OperationDefinitionNode;
       return queryDef.selectionSet.selections[0];
     });
 
@@ -44,71 +55,52 @@ export function useQueryWithCache<T>(
     } as DocumentNode;
   }
 
-  // Initial cache load
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const cacheManager = new CacheManager();
-    const allCachedData: { [key: string]: CachedData<any> } = {};
-
-    cacheKeys.forEach((key) => {
-      const cached = cacheManager.get(key);
-      if (cached?.data) {
-        allCachedData[key] = cached;
-      }
-    });
-
-    if (Object.keys(allCachedData).length > 0) {
-      setCachedData(allCachedData);
-    }
-    isMounted.current = true;
-
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
-
   const hasValidCache = Object.keys(cachedData).length === cacheKeys.length;
 
-  const { loading, error, data } = useQuery(queryRef.current, {
-    skip: typeof window === "undefined" || hasValidCache,
+  const { loading, error, data, refetch } = useQuery(queryRef.current, {
+    skip: hasValidCache,
+    onCompleted: (newData) => {
+      if (!newData) return;
+
+      const newCacheData: { [key: string]: { data: unknown } } = {};
+
+      Object.entries(newData).forEach(([operationName, resultData], index) => {
+        const cacheKey = cacheKeys[index];
+        const newCacheEntry = {
+          data: { [operationName]: resultData },
+        };
+        setCache(cacheKey, newCacheEntry);
+        newCacheData[cacheKey] = newCacheEntry;
+      });
+
+      setCachedData(newCacheData);
+    },
   });
 
-  // Handle data updates and caching
+  // Set up automatic refetching
   useEffect(() => {
-    if (!data || !isMounted.current) return;
+    if (!options?.refetchInterval) return;
 
-    const cacheManager = new CacheManager();
-    const newCacheData: { [key: string]: CachedData<any> } = {};
+    const interval = setInterval(() => {
+      refetch();
+    }, options.refetchInterval);
 
-    Object.entries(data).forEach(([operationName, resultData], index) => {
-      const cacheKey = cacheKeys[index];
-      const newCacheEntry = {
-        data: { [operationName]: resultData },
-        timestamp: Date.now(),
-      };
-      cacheManager.set(cacheKey, newCacheEntry);
-      newCacheData[cacheKey] = newCacheEntry;
-    });
+    return () => clearInterval(interval);
+  }, [options?.refetchInterval, refetch]);
 
-    setCachedData(newCacheData);
-  }, [data]);
-
-  const hasCache = Object.keys(cachedData).length > 0;
   const isFromCache = cacheKeys.map((key) => !!cachedData[key]);
 
-  // Combine cached and fresh data
-  const combinedData = cacheKeys.reduce((acc, key) => {
-    const cached = cachedData[key]?.data;
-    const fresh = data && data[key];
-    return { ...acc, [key]: fresh || cached || {} };
-  }, {} as T);
+  const combinedData = hasValidCache
+    ? cacheKeys.reduce((acc, key) => {
+        return { ...acc, [key]: cachedData[key].data };
+      }, {} as unknown as T)
+    : data || {};
 
   return {
     data: combinedData,
-    loading: loading && !hasCache,
+    loading: loading && !hasValidCache,
     error,
-    timestamps: cacheKeys.map((key) => cachedData[key]?.timestamp),
     isFromCache,
+    refetch,
   };
 }
