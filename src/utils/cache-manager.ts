@@ -1,11 +1,11 @@
 // utils/cache-manager.ts
 export class CacheManager {
   private prefix = "graphql-cache:";
-  private defaultTTL = 1000 * 60 * 60; // 1 hour
+  private defaultTTL = 1000 * 60 * 60;
 
   set(
     key: string,
-    entry: { data: any; timestamp: number },
+    entry: { data: unknown; timestamp: number },
     ttl: number = this.defaultTTL
   ): void {
     if (typeof window === "undefined") return;
@@ -22,7 +22,7 @@ export class CacheManager {
     }
   }
 
-  get(key: string): { data: any; timestamp: number } | null {
+  get(key: string): { data: unknown; timestamp: number } | null {
     if (typeof window === "undefined") return null;
 
     try {
